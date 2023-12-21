@@ -1,0 +1,7 @@
+{
+    "name": "ToggleableGodmode",
+    "description": "Toggleable god mode so you don't die to some things.",
+    "version_number": "1.0.0",
+    "dependencies": [ "BepInEx-BepInExPack-5.4.2100" ],
+    "website_url": "https://github.com/kennyhngo/LethalCompany-Godmode"
+}
