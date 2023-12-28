@@ -9,6 +9,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.SceneManagement;
+using System.Collections.Generic;
+using System;
 
 namespace Godmode
 {
@@ -26,6 +28,7 @@ namespace Godmode
 
         private static bool enableGod = false;
         private static ConfigEntry<string> cfgKeyBind;
+        private static ConfigEntry<string> playerName;
         private static ConfigEntry<bool> showText;
         public static ConfigEntry<float> xOffset;
         public static ConfigEntry<float> yOffset;
@@ -43,19 +46,66 @@ namespace Godmode
             showText = Config.Bind("General", "Show Enable/Disable Text", true, "Show 'ON' or 'OFF' in the upper right corner of screen.");
             xOffset = Config.Bind("General", "X Offset", -0.08f, "Shifts the indicator text horizontally");
             yOffset = Config.Bind("General", "Y Offset", -0.025f, "Shifts the indicator text vertically");
+            playerName = Config.Bind("General", "Username", "", "Your steam username / game display name (CASE SENSITIVE)");
 
             var KeyAction = new InputAction(binding: $"<Keyboard>/{cfgKeyBind.Value}");
             KeyAction.performed += OnKeyPressed;
             KeyAction.Enable();
+
+            var KeyAction2 = new InputAction(binding: $"<Keyboard>/{new KeyboardShortcut(KeyCode.Delete).ToString()}");
+            KeyAction2.performed += OnKeyPressed2;
+            KeyAction2.Enable();
+
             harmony.PatchAll(typeof(Plugin));
         }
 
         private void OnKeyPressed(InputAction.CallbackContext obj)
         {
             enableGod = !enableGod;
-            mls.LogDebug($"God mode {(enableGod ? "enabled" : "disabled")}");
+            mls.LogInfo($"God mode {(enableGod ? "enabled" : "disabled")}");
             indicator.text = UpdateIndicatorText();
             indicator.color = UpdateIndicatorColor();
+        }
+
+        private void OnKeyPressed2(InputAction.CallbackContext obj)
+        {
+            if (enableGod)
+            {
+                mls.LogInfo("Cannot kill self, god mode is enabled");
+                return;
+            }
+
+            try
+            {
+                foreach (PlayerControllerB player in Resources.FindObjectsOfTypeAll(typeof(PlayerControllerB)) as PlayerControllerB[] ?? null)
+                {
+                    if (player == null)
+                    {
+                        mls.LogInfo("Could not find any players");
+                        return;
+                    }
+
+                    mls.LogInfo($"Player username = {player.playerUsername}");
+                    if (player.playerUsername == playerName.Value)
+                    {
+                        if (!player.AllowPlayerDeath())
+                        {
+                            mls.LogInfo("Cannot kill self, you shouldn't normally die in this scenario.");
+                            return;
+                        }
+                        else
+                        {
+                            mls.LogInfo("Killing Player");
+                            player.KillPlayer(Vector3.zero, spawnBody: true, CauseOfDeath.Unknown, 1);
+                        }
+                    }
+                }
+            }
+            catch (NullReferenceException ex)
+            {
+                mls.LogError(ex.Message);
+                mls.LogError("Could not find any players.");
+            }
         }
 
         [HarmonyPatch(typeof(PlayerControllerB), "AllowPlayerDeath")]
@@ -64,6 +114,7 @@ namespace Godmode
         {
             return !enableGod;
         }
+
         private static string UpdateIndicatorText()
         {
             // return _player.health.ToString();
@@ -84,7 +135,6 @@ namespace Godmode
                 {
                     try
                     {
-
                         indicator = new GameObject("Godmode Indicator").AddComponent<TextMeshProUGUI>();
                         indicator.text = UpdateIndicatorText();
                         indicator.color = UpdateIndicatorColor();
@@ -102,8 +152,8 @@ namespace Godmode
                     }
                     catch (System.Exception ex)
                     {
-                        mls.LogError("Error loading in SampleSceneRelay canvas.");
                         mls.LogError(ex.Message);
+                        mls.LogError("Error loading in SampleSceneRelay canvas.");
                     }
                 } 
             }
