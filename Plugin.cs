@@ -11,9 +11,24 @@ using TMPro;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Godmode
 {
+    public class ShovelToggler
+    {
+        private int shovelForce = 1;
+        public void Toggle()
+        {
+            shovelForce = shovelForce == 1 ? 3 : 1;
+        }
+
+        public int GetForce()
+        {
+            return shovelForce;
+        }
+    }
+
     [BepInPlugin(modGUID, modName, modVersion)]
     public class Plugin : BaseUnityPlugin
     {
@@ -33,6 +48,8 @@ namespace Godmode
         public static ConfigEntry<float> xOffset;
         public static ConfigEntry<float> yOffset;
 
+        public static ShovelToggler ShovelToggle = new ShovelToggler();
+
         private void Awake()
         {
             mls = BepInEx.Logging.Logger.CreateLogSource(modGUID);
@@ -44,7 +61,7 @@ namespace Godmode
             SceneManager.sceneLoaded += SceneLoad;
             cfgKeyBind = Config.Bind("General", "Key", "M", "Button to toggle god mode.");
             showText = Config.Bind("General", "Show Enable/Disable Text", true, "Show 'ON' or 'OFF' in the upper right corner of screen.");
-            xOffset = Config.Bind("General", "X Offset", -0.08f, "Shifts the indicator text horizontally");
+            xOffset = Config.Bind("General", "X Offset", -0.09f, "Shifts the indicator text horizontally");
             yOffset = Config.Bind("General", "Y Offset", -0.025f, "Shifts the indicator text vertically");
             playerName = Config.Bind("General", "Username", "", "Your steam username / game display name (CASE SENSITIVE)");
 
@@ -56,7 +73,13 @@ namespace Godmode
             KeyAction2.performed += OnKeyPressed2;
             KeyAction2.Enable();
 
+            var KeyAction3 = new InputAction(binding: $"<Keyboard>/{new KeyboardShortcut(KeyCode.Comma).ToString()}");
+            KeyAction3.performed += OnKeyPressed3;
+            KeyAction3.Enable();
+
             harmony.PatchAll(typeof(Plugin));
+            harmony.PatchAll(typeof(ShovelPatch.GrabbableObjectPatch));
+            harmony.PatchAll(typeof(ShovelPatch.SpiderAIPatch));
         }
 
         private void OnKeyPressed(InputAction.CallbackContext obj)
@@ -108,6 +131,13 @@ namespace Godmode
             }
         }
 
+        private void OnKeyPressed3(InputAction.CallbackContext obj)
+        {
+            ShovelToggle.Toggle();
+            mls.LogInfo($"Updated shovel force to {ShovelToggle.GetForce()}");
+            indicator.text = UpdateIndicatorText();
+        }
+
         [HarmonyPatch(typeof(PlayerControllerB), "AllowPlayerDeath")]
         [HarmonyPrefix]
         private static bool OverrideDeath()
@@ -118,7 +148,7 @@ namespace Godmode
         private static string UpdateIndicatorText()
         {
             // return _player.health.ToString();
-            return (enableGod ? "ON" : "OFF");
+            return $"{(enableGod ? "ON" : "OFF")}{Godmode.Plugin.ShovelToggle.GetForce()}";
         }
 
         private static Color UpdateIndicatorColor()
@@ -157,6 +187,31 @@ namespace Godmode
                     }
                 } 
             }
+        }
+    }
+}
+
+namespace ShovelPatch
+{
+    [HarmonyPatch(typeof(GrabbableObject), "Start")]
+    internal class GrabbableObjectPatch
+    {
+        public static void Prefix(GrabbableObject __instance)
+        {
+            if (__instance.GetType() == typeof(Shovel))
+            {
+                Shovel shovel = (Shovel)((__instance is Shovel) ? __instance : null);
+                shovel.shovelHitForce = Godmode.Plugin.ShovelToggle.GetForce();
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(SandSpiderAI), "HitEnemy")]
+    internal class SpiderAIPatch
+    {
+        public static void Prefix(ref int ___health, int force, PlayerControllerB playerWhoHit, bool playHitSFX)
+        {
+            ___health = ___health - force + 1;
         }
     }
 }
